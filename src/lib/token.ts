@@ -7,7 +7,7 @@ import { getDeviceCode } from "~/services/github/get-device-code"
 import { getGitHubUser } from "~/services/github/get-user"
 import { pollAccessToken } from "~/services/github/poll-access-token"
 
-import { HTTPError } from "./http-error"
+import { HTTPError } from "./error"
 import { state } from "./state"
 
 const readGithubToken = () => fs.readFile(PATHS.GITHUB_TOKEN_PATH, "utf8")
@@ -19,13 +19,22 @@ export const setupCopilotToken = async () => {
   const { token, refresh_in } = await getCopilotToken()
   state.copilotToken = token
 
-  const refreshInterval = (refresh_in - 60) * 1000
+  // Display the Copilot token to the screen
+  consola.debug("GitHub Copilot Token fetched successfully!")
+  if (state.showToken) {
+    consola.info("Copilot token:", token)
+  }
 
+  const refreshInterval = (refresh_in - 60) * 1000
   setInterval(async () => {
-    consola.start("Refreshing Copilot token")
+    consola.debug("Refreshing Copilot token")
     try {
       const { token } = await getCopilotToken()
       state.copilotToken = token
+      consola.debug("Copilot token refreshed")
+      if (state.showToken) {
+        consola.info("Refreshed Copilot token:", token)
+      }
     } catch (error) {
       consola.error("Failed to refresh Copilot token:", error)
       throw error
@@ -45,6 +54,9 @@ export async function setupGitHubToken(
 
     if (githubToken && !options?.force) {
       state.githubToken = githubToken
+      if (state.showToken) {
+        consola.info("GitHub token:", githubToken)
+      }
       await logUser()
 
       return
@@ -62,6 +74,9 @@ export async function setupGitHubToken(
     await writeGithubToken(token)
     state.githubToken = token
 
+    if (state.showToken) {
+      consola.info("GitHub token:", token)
+    }
     await logUser()
   } catch (error) {
     if (error instanceof HTTPError) {
