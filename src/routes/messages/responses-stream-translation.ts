@@ -15,6 +15,7 @@ export interface ResponsesStreamState {
   initialInputTokens?: number
   functionCallStateByOutputIndex: Map<number, FunctionCallStreamState>
   functionCallOutputIndexByItemId: Map<string, number>
+  summryIndex: number
 }
 
 type FunctionCallStreamState = {
@@ -32,6 +33,7 @@ export const createResponsesStreamState = (): ResponsesStreamState => ({
   blockHasDelta: new Set(),
   functionCallStateByOutputIndex: new Map(),
   functionCallOutputIndexByItemId: new Map(),
+  summryIndex: 0,
 })
 
 export const translateResponsesStreamEvent = (
@@ -49,18 +51,28 @@ export const translateResponsesStreamEvent = (
       return handleResponseCreated(rawEvent, state)
     }
 
-    case "response.reasoning_summary_text.delta":
+    case "response.reasoning_summary_text.delta": {
+      return handleReasoningSummaryTextDelta(rawEvent, state)
+    }
+
     case "response.output_text.delta": {
       return handleOutputTextDelta(rawEvent, state)
     }
 
-    case "response.reasoning_summary_part.done":
+    case "response.reasoning_summary_part.done": {
+      return handleReasoningSummaryPartDone(rawEvent, state)
+    }
+
     case "response.output_text.done": {
       return handleOutputTextDone(rawEvent, state)
     }
 
     case "response.output_item.added": {
       return handleOutputItemAdded(rawEvent, state)
+    }
+
+    case "response.output_item.done": {
+      return handleOutputItemDone(rawEvent, state)
     }
 
     case "response.function_call_arguments.delta": {
@@ -139,6 +151,51 @@ const handleOutputItemAdded = (
     })
     state.blockHasDelta.add(blockIndex)
   }
+
+  return events
+}
+
+const handleOutputItemDone = (
+  rawEvent: Record<string, unknown>,
+  state: ResponsesStreamState,
+): Array<AnthropicStreamEventData> => {
+  const events = ensureMessageStart(state)
+
+  const item = isRecord(rawEvent.item) ? rawEvent.item : undefined
+  if (!item) {
+    return events
+  }
+
+  const itemType = typeof item.type === "string" ? item.type : undefined
+  if (itemType !== "reasoning") {
+    return events
+  }
+
+  const outputIndex = toNumber(rawEvent.output_index)
+  const contentIndex = state.summryIndex
+
+  const blockIndex = openThinkingBlockIfNeeded(state, {
+    outputIndex,
+    contentIndex,
+    events,
+  })
+
+  const signature =
+    typeof item.encrypted_content === "string" ? item.encrypted_content : ""
+
+  if (signature) {
+    events.push({
+      type: "content_block_delta",
+      index: blockIndex,
+      delta: {
+        type: "signature_delta",
+        signature,
+      },
+    })
+    state.blockHasDelta.add(blockIndex)
+  }
+
+  closeBlockIfOpen(state, blockIndex, events)
 
   return events
 }
@@ -253,6 +310,71 @@ const handleOutputTextDelta = (
     },
   })
   state.blockHasDelta.add(blockIndex)
+
+  return events
+}
+
+const handleReasoningSummaryTextDelta = (
+  rawEvent: Record<string, unknown>,
+  state: ResponsesStreamState,
+): Array<AnthropicStreamEventData> => {
+  const events = ensureMessageStart(state)
+
+  const outputIndex = toNumber(rawEvent.output_index)
+  const contentIndex = toNumber(rawEvent.summary_index)
+  const deltaText = typeof rawEvent.delta === "string" ? rawEvent.delta : ""
+
+  if (!deltaText) {
+    return events
+  }
+
+  const blockIndex = openThinkingBlockIfNeeded(state, {
+    outputIndex,
+    contentIndex,
+    events,
+  })
+
+  events.push({
+    type: "content_block_delta",
+    index: blockIndex,
+    delta: {
+      type: "thinking_delta",
+      thinking: deltaText,
+    },
+  })
+  state.blockHasDelta.add(blockIndex)
+
+  return events
+}
+
+const handleReasoningSummaryPartDone = (
+  rawEvent: Record<string, unknown>,
+  state: ResponsesStreamState,
+): Array<AnthropicStreamEventData> => {
+  const events = ensureMessageStart(state)
+
+  const outputIndex = toNumber(rawEvent.output_index)
+  const contentIndex = toNumber(rawEvent.summary_index)
+  state.summryIndex = contentIndex
+  const part = isRecord(rawEvent.part) ? rawEvent.part : undefined
+  const text = part && typeof part.text === "string" ? part.text : ""
+
+  const blockIndex = openThinkingBlockIfNeeded(state, {
+    outputIndex,
+    contentIndex,
+    events,
+  })
+
+  if (text && !state.blockHasDelta.has(blockIndex)) {
+    events.push({
+      type: "content_block_delta",
+      index: blockIndex,
+      delta: {
+        type: "thinking_delta",
+        thinking: text,
+      },
+    })
+  }
 
   return events
 }
@@ -422,6 +544,39 @@ const openTextBlockIfNeeded = (
       content_block: {
         type: "text",
         text: "",
+      },
+    })
+    state.openBlocks.add(blockIndex)
+  }
+
+  return blockIndex
+}
+
+const openThinkingBlockIfNeeded = (
+  state: ResponsesStreamState,
+  params: {
+    outputIndex: number
+    contentIndex: number
+    events: Array<AnthropicStreamEventData>
+  },
+): number => {
+  const { outputIndex, contentIndex, events } = params
+  const key = getBlockKey(outputIndex, contentIndex)
+  let blockIndex = state.blockIndexByKey.get(key)
+
+  if (blockIndex === undefined) {
+    blockIndex = state.nextContentBlockIndex
+    state.nextContentBlockIndex += 1
+    state.blockIndexByKey.set(key, blockIndex)
+  }
+
+  if (!state.openBlocks.has(blockIndex)) {
+    events.push({
+      type: "content_block_start",
+      index: blockIndex,
+      content_block: {
+        type: "thinking",
+        thinking: "",
       },
     })
     state.openBlocks.add(blockIndex)
