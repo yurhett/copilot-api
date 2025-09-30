@@ -10,7 +10,6 @@ import {
   type ResponsesResult,
   type ResponseOutputContentBlock,
   type ResponseOutputFunctionCall,
-  type ResponseOutputFunctionCallOutput,
   type ResponseOutputItem,
   type ResponseOutputReasoning,
   type ResponseReasoningBlock,
@@ -388,15 +387,7 @@ const mapOutputToAnthropicContent = (
         }
         break
       }
-      case "function_call_output": {
-        const outputBlock = createFunctionCallOutputBlock(item)
-        if (outputBlock) {
-          contentBlocks.push(outputBlock)
-        }
-        break
-      }
-      case "message":
-      case "output_text": {
+      case "message": {
         const combinedText = combineMessageTextContent(item.content)
         if (combinedText.length > 0) {
           contentBlocks.push({ type: "text", text: combinedText })
@@ -508,19 +499,6 @@ const createToolUseContentBlock = (
     id: toolId,
     name: call.name,
     input,
-  }
-}
-
-const createFunctionCallOutputBlock = (
-  output: ResponseOutputFunctionCallOutput,
-): AnthropicAssistantContentBlock | null => {
-  if (typeof output.output !== "string" || output.output.length === 0) {
-    return null
-  }
-
-  return {
-    type: "text",
-    text: output.output,
   }
 }
 

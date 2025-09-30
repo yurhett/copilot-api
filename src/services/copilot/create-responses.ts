@@ -95,11 +95,10 @@ export type ResponseOutputItem =
   | ResponseOutputMessage
   | ResponseOutputReasoning
   | ResponseOutputFunctionCall
-  | ResponseOutputFunctionCallOutput
 
 export interface ResponseOutputMessage {
   id: string
-  type: "message" | "output_text"
+  type: "message"
   role: "assistant"
   status: "completed" | "in_progress" | "incomplete"
   content?: Array<ResponseOutputContentBlock>
@@ -127,15 +126,6 @@ export interface ResponseOutputFunctionCall {
   call_id?: string
   name: string
   arguments: string
-  status?: "in_progress" | "completed" | "incomplete"
-  [key: string]: unknown
-}
-
-export interface ResponseOutputFunctionCallOutput {
-  id: string
-  type: "function_call_output"
-  call_id: string
-  output: string
   status?: "in_progress" | "completed" | "incomplete"
   [key: string]: unknown
 }
