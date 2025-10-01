@@ -567,12 +567,17 @@ const mapResponsesStopReason = (
 const mapResponsesUsage = (
   response: ResponsesResult,
 ): AnthropicResponse["usage"] => {
-  const promptTokens = response.usage?.input_tokens ?? 0
-  const completionTokens = response.usage?.output_tokens ?? 0
+  const inputTokens = response.usage?.input_tokens ?? 0
+  const outputTokens = response.usage?.output_tokens ?? 0
+  const inputCachedTokens = response.usage?.input_tokens_details?.cached_tokens
 
   return {
-    input_tokens: promptTokens,
-    output_tokens: completionTokens,
+    input_tokens: inputTokens - (inputCachedTokens ?? 0),
+    output_tokens: outputTokens,
+    ...(response.usage?.input_tokens_details?.cached_tokens !== undefined && {
+      cache_read_input_tokens:
+        response.usage.input_tokens_details.cached_tokens,
+    }),
   }
 }
 

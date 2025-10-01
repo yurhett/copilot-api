@@ -13,6 +13,7 @@ export interface ResponsesStreamState {
   currentResponseId?: string
   currentModel?: string
   initialInputTokens?: number
+  initialInputCachedTokens?: number
   functionCallStateByOutputIndex: Map<number, FunctionCallStreamState>
   functionCallOutputIndexByItemId: Map<string, number>
 }
@@ -476,11 +477,10 @@ const ensureMessageStart = (
   const id = response?.id ?? state.currentResponseId ?? "response"
   const model = response?.model ?? state.currentModel ?? ""
 
-  const inputTokens =
-    response?.usage?.input_tokens ?? state.initialInputTokens ?? 0
-
   state.messageStartSent = true
 
+  const inputTokens =
+    (state.initialInputTokens ?? 0) - (state.initialInputCachedTokens ?? 0)
   return [
     {
       type: "message_start",
@@ -495,6 +495,9 @@ const ensureMessageStart = (
         usage: {
           input_tokens: inputTokens,
           output_tokens: 0,
+          ...(state.initialInputCachedTokens !== undefined && {
+            cache_creation_input_tokens: state.initialInputCachedTokens,
+          }),
         },
       },
     },
@@ -597,6 +600,8 @@ const cacheResponseMetadata = (
   state.currentResponseId = response.id
   state.currentModel = response.model
   state.initialInputTokens = response.usage?.input_tokens ?? 0
+  state.initialInputCachedTokens =
+    response.usage?.input_tokens_details?.cached_tokens
 }
 
 const buildErrorEvent = (message: string): AnthropicStreamEventData => ({
