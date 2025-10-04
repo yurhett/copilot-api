@@ -9,10 +9,14 @@ export function initProxyFromEnv(): void {
     const direct = new Agent()
     const proxies = new Map<string, ProxyAgent>()
 
-    const dispatcher: Dispatcher = {
+    // We only need a minimal dispatcher that implements `dispatch` at runtime.
+    // Typing the object as `Dispatcher` forces TypeScript to require many
+    // additional methods. Instead, keep a plain object and cast when passing
+    // to `setGlobalDispatcher`.
+    const dispatcher = {
       dispatch(
-        options: Dispatcher.RequestOptions,
-        handler: Dispatcher.DispatchHandlers,
+        options: Dispatcher.DispatchOptions,
+        handler: Dispatcher.DispatchHandler,
       ) {
         try {
           const origin =
@@ -54,7 +58,7 @@ export function initProxyFromEnv(): void {
       },
     }
 
-    setGlobalDispatcher(dispatcher)
+    setGlobalDispatcher(dispatcher as unknown as Dispatcher)
     consola.debug("HTTP proxy configured from environment (per-URL)")
   } catch (err) {
     consola.debug("Proxy setup skipped:", err)
