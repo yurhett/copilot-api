@@ -23,6 +23,7 @@ import {
 import {
   createResponses,
   type ResponsesResult,
+  type ResponseStreamEvent,
 } from "~/services/copilot/create-responses"
 
 import {
@@ -150,16 +151,10 @@ const handleWithResponsesApi = async (
           continue
         }
 
-        if (data === "[DONE]") {
-          break
-        }
-
-        const parsed = safeJsonParse(data)
-        if (!parsed) {
-          continue
-        }
-
-        const events = translateResponsesStreamEvent(parsed, streamState)
+        const events = translateResponsesStreamEvent(
+          JSON.parse(data) as ResponseStreamEvent,
+          streamState,
+        )
         for (const event of events) {
           consola.debug("Translated Anthropic event:", JSON.stringify(event))
           await stream.writeSSE({
@@ -210,12 +205,3 @@ const isNonStreaming = (
 const isAsyncIterable = <T>(value: unknown): value is AsyncIterable<T> =>
   Boolean(value)
   && typeof (value as AsyncIterable<T>)[Symbol.asyncIterator] === "function"
-
-const safeJsonParse = (value: string): Record<string, unknown> | undefined => {
-  try {
-    return JSON.parse(value) as Record<string, unknown>
-  } catch (error) {
-    consola.warn("Failed to parse Responses stream chunk:", value, error)
-    return undefined
-  }
-}

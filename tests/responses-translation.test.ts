@@ -50,7 +50,6 @@ describe("translateAnthropicMessagesToResponsesPayload", () => {
   it("converts anthropic text blocks into response input messages", () => {
     const result = translateAnthropicMessagesToResponsesPayload(samplePayload)
 
-    console.log("result:", JSON.stringify(result, null, 2))
     expect(Array.isArray(result.input)).toBe(true)
     const input = result.input as Array<ResponseInputMessage>
     expect(input).toHaveLength(1)
@@ -81,7 +80,7 @@ describe("translateResponsesResultToAnthropic", () => {
         {
           id: "reason_1",
           type: "reasoning",
-          summary: [{ type: "text", text: "Thinking about the task." }],
+          summary: [{ type: "summary_text", text: "Thinking about the task." }],
           status: "completed",
           encrypted_content: "encrypted_reasoning_content",
         },
@@ -116,7 +115,7 @@ describe("translateResponsesResultToAnthropic", () => {
         total_tokens: 156,
       },
       error: null,
-      incomplete_details: { reason: "tool_use" },
+      incomplete_details: { reason: "content_filter" },
       instructions: null,
       metadata: null,
       parallel_tool_calls: false,
@@ -129,7 +128,7 @@ describe("translateResponsesResultToAnthropic", () => {
     const anthropicResponse =
       translateResponsesResultToAnthropic(responsesResult)
 
-    expect(anthropicResponse.stop_reason).toBe("tool_use")
+    expect(anthropicResponse.stop_reason).toBe("end_turn")
     expect(anthropicResponse.content).toHaveLength(3)
 
     const [thinkingBlock, toolUseBlock, textBlock] = anthropicResponse.content

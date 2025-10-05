@@ -9,21 +9,49 @@ export interface ResponsesPayload {
   model: string
   instructions?: string | null
   input?: string | Array<ResponseInputItem>
-  tools?: Array<Record<string, unknown>> | null
-  tool_choice?: unknown
+  tools?: Array<Tool> | null
+  tool_choice?: ToolChoiceOptions | ToolChoiceFunction
   temperature?: number | null
   top_p?: number | null
   max_output_tokens?: number | null
-  metadata?: Record<string, unknown> | null
+  metadata?: Metadata | null
   stream?: boolean | null
-  response_format?: Record<string, unknown> | null
   safety_identifier?: string | null
   prompt_cache_key?: string | null
   parallel_tool_calls?: boolean | null
   store?: boolean | null
-  reasoning?: Record<string, unknown> | null
-  include?: Array<string>
+  reasoning?: Reasoning | null
+  include?: Array<ResponseIncludable>
   [key: string]: unknown
+}
+
+export type ToolChoiceOptions = "none" | "auto" | "required"
+
+export interface ToolChoiceFunction {
+  name: string
+  type: "function"
+}
+
+export type Tool = FunctionTool
+
+export interface FunctionTool {
+  name: string
+  parameters: { [key: string]: unknown } | null
+  strict: boolean | null
+  type: "function"
+  description?: string | null
+}
+
+export type ResponseIncludable =
+  | "file_search_call.results"
+  | "message.input_image.image_url"
+  | "computer_call_output.output.image_url"
+  | "reasoning.encrypted_content"
+  | "code_interpreter_call.outputs"
+
+export interface Reasoning {
+  effort?: "minimal" | "low" | "medium" | "high" | null
+  summary?: "auto" | "concise" | "detailed" | null
 }
 
 export interface ResponseInputMessage {
@@ -49,6 +77,7 @@ export interface ResponseFunctionCallOutputItem {
 }
 
 export interface ResponseInputReasoning {
+  id?: string
   type: "reasoning"
   summary: Array<{
     type: "summary_text"
@@ -70,7 +99,7 @@ export type ResponseInputContent =
   | Record<string, unknown>
 
 export interface ResponseInputText {
-  type?: "input_text" | "output_text"
+  type: "input_text" | "output_text"
   text: string
 }
 
@@ -78,7 +107,7 @@ export interface ResponseInputImage {
   type: "input_image"
   image_url?: string | null
   file_id?: string | null
-  detail?: "low" | "high" | "auto"
+  detail: "low" | "high" | "auto"
 }
 
 export interface ResponsesResult {
@@ -90,15 +119,25 @@ export interface ResponsesResult {
   output_text: string
   status: string
   usage?: ResponseUsage | null
-  error: Record<string, unknown> | null
-  incomplete_details: Record<string, unknown> | null
+  error: ResponseError | null
+  incomplete_details: IncompleteDetails | null
   instructions: string | null
-  metadata: Record<string, unknown> | null
+  metadata: Metadata | null
   parallel_tool_calls: boolean
   temperature: number | null
   tool_choice: unknown
-  tools: Array<Record<string, unknown>>
+  tools: Array<Tool>
   top_p: number | null
+}
+
+export type Metadata = { [key: string]: string }
+
+export interface IncompleteDetails {
+  reason?: "max_output_tokens" | "content_filter"
+}
+
+export interface ResponseError {
+  message: string
 }
 
 export type ResponseOutputItem =
@@ -119,8 +158,7 @@ export interface ResponseOutputReasoning {
   type: "reasoning"
   summary?: Array<ResponseReasoningBlock>
   encrypted_content?: string
-  status: "completed" | "in_progress" | "incomplete"
-  [key: string]: unknown
+  status?: "completed" | "in_progress" | "incomplete"
 }
 
 export interface ResponseReasoningBlock {
@@ -129,13 +167,12 @@ export interface ResponseReasoningBlock {
 }
 
 export interface ResponseOutputFunctionCall {
-  id: string
+  id?: string
   type: "function_call"
-  call_id?: string
+  call_id: string
   name: string
   arguments: string
   status?: "in_progress" | "completed" | "incomplete"
-  [key: string]: unknown
 }
 
 export type ResponseOutputContentBlock =
@@ -164,6 +201,120 @@ export interface ResponseUsage {
   output_tokens_details?: {
     reasoning_tokens: number
   }
+}
+
+export type ResponseStreamEvent =
+  | ResponseCompletedEvent
+  | ResponseIncompleteEvent
+  | ResponseCreatedEvent
+  | ResponseErrorEvent
+  | ResponseFunctionCallArgumentsDeltaEvent
+  | ResponseFunctionCallArgumentsDoneEvent
+  | ResponseFailedEvent
+  | ResponseOutputItemAddedEvent
+  | ResponseOutputItemDoneEvent
+  | ResponseReasoningSummaryTextDeltaEvent
+  | ResponseReasoningSummaryTextDoneEvent
+  | ResponseTextDeltaEvent
+  | ResponseTextDoneEvent
+
+export interface ResponseCompletedEvent {
+  response: ResponsesResult
+  sequence_number: number
+  type: "response.completed"
+}
+
+export interface ResponseIncompleteEvent {
+  response: ResponsesResult
+  sequence_number: number
+  type: "response.incomplete"
+}
+
+export interface ResponseCreatedEvent {
+  response: ResponsesResult
+  sequence_number: number
+  type: "response.created"
+}
+
+export interface ResponseErrorEvent {
+  code: string | null
+  message: string
+  param: string | null
+  sequence_number: number
+  type: "error"
+}
+
+export interface ResponseFunctionCallArgumentsDeltaEvent {
+  delta: string
+  item_id: string
+  output_index: number
+  sequence_number: number
+  type: "response.function_call_arguments.delta"
+}
+
+export interface ResponseFunctionCallArgumentsDoneEvent {
+  arguments: string
+  item_id: string
+  name: string
+  output_index: number
+  sequence_number: number
+  type: "response.function_call_arguments.done"
+}
+
+export interface ResponseFailedEvent {
+  response: ResponsesResult
+  sequence_number: number
+  type: "response.failed"
+}
+
+export interface ResponseOutputItemAddedEvent {
+  item: ResponseOutputItem
+  output_index: number
+  sequence_number: number
+  type: "response.output_item.added"
+}
+
+export interface ResponseOutputItemDoneEvent {
+  item: ResponseOutputItem
+  output_index: number
+  sequence_number: number
+  type: "response.output_item.done"
+}
+
+export interface ResponseReasoningSummaryTextDeltaEvent {
+  delta: string
+  item_id: string
+  output_index: number
+  sequence_number: number
+  summary_index: number
+  type: "response.reasoning_summary_text.delta"
+}
+
+export interface ResponseReasoningSummaryTextDoneEvent {
+  item_id: string
+  output_index: number
+  sequence_number: number
+  summary_index: number
+  text: string
+  type: "response.reasoning_summary_text.done"
+}
+
+export interface ResponseTextDeltaEvent {
+  content_index: number
+  delta: string
+  item_id: string
+  output_index: number
+  sequence_number: number
+  type: "response.output_text.delta"
+}
+
+export interface ResponseTextDoneEvent {
+  content_index: number
+  item_id: string
+  output_index: number
+  sequence_number: number
+  text: string
+  type: "response.output_text.done"
 }
 
 export type ResponsesStream = ReturnType<typeof events>

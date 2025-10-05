@@ -1,4 +1,22 @@
-import { type ResponsesResult } from "~/services/copilot/create-responses"
+import consola from "consola"
+
+import {
+  type ResponseCompletedEvent,
+  type ResponseCreatedEvent,
+  type ResponseErrorEvent,
+  type ResponseFailedEvent,
+  type ResponseFunctionCallArgumentsDeltaEvent,
+  type ResponseFunctionCallArgumentsDoneEvent,
+  type ResponseIncompleteEvent,
+  type ResponseOutputItemAddedEvent,
+  type ResponseOutputItemDoneEvent,
+  type ResponseReasoningSummaryTextDeltaEvent,
+  type ResponseReasoningSummaryTextDoneEvent,
+  type ResponsesResult,
+  type ResponseStreamEvent,
+  type ResponseTextDeltaEvent,
+  type ResponseTextDoneEvent,
+} from "~/services/copilot/create-responses"
 
 import { type AnthropicStreamEventData } from "./anthropic-types"
 import { translateResponsesResultToAnthropic } from "./responses-translation"
@@ -10,12 +28,7 @@ export interface ResponsesStreamState {
   blockIndexByKey: Map<string, number>
   openBlocks: Set<number>
   blockHasDelta: Set<number>
-  currentResponseId?: string
-  currentModel?: string
-  initialInputTokens?: number
-  initialInputCachedTokens?: number
   functionCallStateByOutputIndex: Map<number, FunctionCallStreamState>
-  functionCallOutputIndexByItemId: Map<string, number>
 }
 
 type FunctionCallStreamState = {
@@ -32,22 +45,20 @@ export const createResponsesStreamState = (): ResponsesStreamState => ({
   openBlocks: new Set(),
   blockHasDelta: new Set(),
   functionCallStateByOutputIndex: new Map(),
-  functionCallOutputIndexByItemId: new Map(),
 })
 
 export const translateResponsesStreamEvent = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseStreamEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const eventType =
-    typeof rawEvent.type === "string" ? rawEvent.type : undefined
-  if (!eventType) {
-    return []
-  }
-
+  const eventType = rawEvent.type
   switch (eventType) {
     case "response.created": {
       return handleResponseCreated(rawEvent, state)
+    }
+
+    case "response.output_item.added": {
+      return handleOutputItemAdded(rawEvent, state)
     }
 
     case "response.reasoning_summary_text.delta": {
@@ -58,18 +69,13 @@ export const translateResponsesStreamEvent = (
       return handleOutputTextDelta(rawEvent, state)
     }
 
-    case "response.reasoning_summary_part.done": {
-      return handleReasoningSummaryPartDone(rawEvent, state)
+    case "response.reasoning_summary_text.done": {
+      return handleReasoningSummaryTextDone(rawEvent, state)
     }
 
     case "response.output_text.done": {
       return handleOutputTextDone(rawEvent, state)
     }
-
-    case "response.output_item.added": {
-      return handleOutputItemAdded(rawEvent, state)
-    }
-
     case "response.output_item.done": {
       return handleOutputItemDone(rawEvent, state)
     }
@@ -96,6 +102,7 @@ export const translateResponsesStreamEvent = (
     }
 
     default: {
+      consola.debug("Unknown Responses stream event type:", eventType)
       return []
     }
   }
@@ -103,35 +110,24 @@ export const translateResponsesStreamEvent = (
 
 // Helper handlers to keep translateResponsesStreamEvent concise
 const handleResponseCreated = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseCreatedEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const response = toResponsesResult(rawEvent.response)
-  if (response) {
-    cacheResponseMetadata(state, response)
-  }
-  return ensureMessageStart(state, response)
+  return messageStart(state, rawEvent.response)
 }
 
 const handleOutputItemAdded = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseOutputItemAddedEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const response = toResponsesResult(rawEvent.response)
-  const events = ensureMessageStart(state, response)
-
-  const functionCallDetails = extractFunctionCallDetails(rawEvent, state)
+  const events = new Array<AnthropicStreamEventData>()
+  const functionCallDetails = extractFunctionCallDetails(rawEvent)
   if (!functionCallDetails) {
     return events
   }
 
-  const { outputIndex, toolCallId, name, initialArguments, itemId } =
+  const { outputIndex, toolCallId, name, initialArguments } =
     functionCallDetails
-
-  if (itemId) {
-    state.functionCallOutputIndexByItemId.set(itemId, outputIndex)
-  }
-
   const blockIndex = openFunctionCallBlock(state, {
     outputIndex,
     toolCallId,
@@ -155,28 +151,19 @@ const handleOutputItemAdded = (
 }
 
 const handleOutputItemDone = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseOutputItemDoneEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const events = ensureMessageStart(state)
-
-  const item = isRecord(rawEvent.item) ? rawEvent.item : undefined
-  if (!item) {
-    return events
-  }
-
-  const itemType = typeof item.type === "string" ? item.type : undefined
+  const events = new Array<AnthropicStreamEventData>()
+  const item = rawEvent.item
+  const itemType = item.type
   if (itemType !== "reasoning") {
     return events
   }
 
-  const outputIndex = toNumber(rawEvent.output_index)
-
+  const outputIndex = rawEvent.output_index
   const blockIndex = openThinkingBlockIfNeeded(state, outputIndex, events)
-
-  const signature =
-    typeof item.encrypted_content === "string" ? item.encrypted_content : ""
-
+  const signature = (item.encrypted_content ?? "") + "@" + item.id
   if (signature) {
     events.push({
       type: "content_block_delta",
@@ -195,21 +182,12 @@ const handleOutputItemDone = (
 }
 
 const handleFunctionCallArgumentsDelta = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseFunctionCallArgumentsDeltaEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const events = ensureMessageStart(state)
-
-  const outputIndex = resolveFunctionCallOutputIndex(state, rawEvent)
-  if (outputIndex === undefined) {
-    return events
-  }
-
-  const deltaText = typeof rawEvent.delta === "string" ? rawEvent.delta : ""
-  if (!deltaText) {
-    return events
-  }
-
+  const events = new Array<AnthropicStreamEventData>()
+  const outputIndex = rawEvent.output_index
+  const deltaText = rawEvent.delta
   const blockIndex = openFunctionCallBlock(state, {
     outputIndex,
     events,
@@ -229,16 +207,11 @@ const handleFunctionCallArgumentsDelta = (
 }
 
 const handleFunctionCallArgumentsDone = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseFunctionCallArgumentsDoneEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const events = ensureMessageStart(state)
-
-  const outputIndex = resolveFunctionCallOutputIndex(state, rawEvent)
-  if (outputIndex === undefined) {
-    return events
-  }
-
+  const events = new Array<AnthropicStreamEventData>()
+  const outputIndex = rawEvent.output_index
   const blockIndex = openFunctionCallBlock(state, {
     outputIndex,
     events,
@@ -260,30 +233,18 @@ const handleFunctionCallArgumentsDone = (
   }
 
   closeBlockIfOpen(state, blockIndex, events)
-
-  const existingState = state.functionCallStateByOutputIndex.get(outputIndex)
-  if (existingState) {
-    state.functionCallOutputIndexByItemId.delete(existingState.toolCallId)
-  }
   state.functionCallStateByOutputIndex.delete(outputIndex)
-
-  const itemId = toNonEmptyString(rawEvent.item_id)
-  if (itemId) {
-    state.functionCallOutputIndexByItemId.delete(itemId)
-  }
-
   return events
 }
 
 const handleOutputTextDelta = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseTextDeltaEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const events = ensureMessageStart(state)
-
-  const outputIndex = toNumber(rawEvent.output_index)
-  const contentIndex = toNumber(rawEvent.content_index)
-  const deltaText = typeof rawEvent.delta === "string" ? rawEvent.delta : ""
+  const events = new Array<AnthropicStreamEventData>()
+  const outputIndex = rawEvent.output_index
+  const contentIndex = rawEvent.content_index
+  const deltaText = rawEvent.delta
 
   if (!deltaText) {
     return events
@@ -309,18 +270,12 @@ const handleOutputTextDelta = (
 }
 
 const handleReasoningSummaryTextDelta = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseReasoningSummaryTextDeltaEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const events = ensureMessageStart(state)
-
-  const outputIndex = toNumber(rawEvent.output_index)
-  const deltaText = typeof rawEvent.delta === "string" ? rawEvent.delta : ""
-
-  if (!deltaText) {
-    return events
-  }
-
+  const outputIndex = rawEvent.output_index
+  const deltaText = rawEvent.delta
+  const events = new Array<AnthropicStreamEventData>()
   const blockIndex = openThinkingBlockIfNeeded(state, outputIndex, events)
 
   events.push({
@@ -336,16 +291,13 @@ const handleReasoningSummaryTextDelta = (
   return events
 }
 
-const handleReasoningSummaryPartDone = (
-  rawEvent: Record<string, unknown>,
+const handleReasoningSummaryTextDone = (
+  rawEvent: ResponseReasoningSummaryTextDoneEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const events = ensureMessageStart(state)
-
-  const outputIndex = toNumber(rawEvent.output_index)
-  const part = isRecord(rawEvent.part) ? rawEvent.part : undefined
-  const text = part && typeof part.text === "string" ? part.text : ""
-
+  const outputIndex = rawEvent.output_index
+  const text = rawEvent.text
+  const events = new Array<AnthropicStreamEventData>()
   const blockIndex = openThinkingBlockIfNeeded(state, outputIndex, events)
 
   if (text && !state.blockHasDelta.has(blockIndex)) {
@@ -363,14 +315,13 @@ const handleReasoningSummaryPartDone = (
 }
 
 const handleOutputTextDone = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseTextDoneEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const events = ensureMessageStart(state)
-
-  const outputIndex = toNumber(rawEvent.output_index)
-  const contentIndex = toNumber(rawEvent.content_index)
-  const text = typeof rawEvent.text === "string" ? rawEvent.text : ""
+  const events = new Array<AnthropicStreamEventData>()
+  const outputIndex = rawEvent.output_index
+  const contentIndex = rawEvent.content_index
+  const text = rawEvent.text
 
   const blockIndex = openTextBlockIfNeeded(state, {
     outputIndex,
@@ -395,53 +346,39 @@ const handleOutputTextDone = (
 }
 
 const handleResponseCompleted = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseCompletedEvent | ResponseIncompleteEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const response = toResponsesResult(rawEvent.response)
-  const events = ensureMessageStart(state, response)
+  const response = rawEvent.response
+  const events = new Array<AnthropicStreamEventData>()
 
   closeAllOpenBlocks(state, events)
-
-  if (response) {
-    const anthropic = translateResponsesResultToAnthropic(response)
-    events.push({
+  const anthropic = translateResponsesResultToAnthropic(response)
+  events.push(
+    {
       type: "message_delta",
       delta: {
         stop_reason: anthropic.stop_reason,
         stop_sequence: anthropic.stop_sequence,
       },
       usage: anthropic.usage,
-    })
-  } else {
-    events.push({
-      type: "message_delta",
-      delta: {
-        stop_reason: null,
-        stop_sequence: null,
-      },
-    })
-  }
-
-  events.push({ type: "message_stop" })
+    },
+    { type: "message_stop" },
+  )
   state.messageCompleted = true
-
   return events
 }
 
 const handleResponseFailed = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseFailedEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
-  const response = toResponsesResult(rawEvent.response)
-  const events = ensureMessageStart(state, response)
-
+  const response = rawEvent.response
+  const events = new Array<AnthropicStreamEventData>()
   closeAllOpenBlocks(state, events)
 
   const message =
-    typeof rawEvent.error === "string" ?
-      rawEvent.error
-    : "Response generation failed."
+    response.error?.message ?? "The response failed due to an unknown error."
 
   events.push(buildErrorEvent(message))
   state.messageCompleted = true
@@ -450,7 +387,7 @@ const handleResponseFailed = (
 }
 
 const handleErrorEvent = (
-  rawEvent: Record<string, unknown>,
+  rawEvent: ResponseErrorEvent,
   state: ResponsesStreamState,
 ): Array<AnthropicStreamEventData> => {
   const message =
@@ -462,41 +399,30 @@ const handleErrorEvent = (
   return [buildErrorEvent(message)]
 }
 
-const ensureMessageStart = (
+const messageStart = (
   state: ResponsesStreamState,
-  response?: ResponsesResult,
+  response: ResponsesResult,
 ): Array<AnthropicStreamEventData> => {
-  if (state.messageStartSent) {
-    return []
-  }
-
-  if (response) {
-    cacheResponseMetadata(state, response)
-  }
-
-  const id = response?.id ?? state.currentResponseId ?? "response"
-  const model = response?.model ?? state.currentModel ?? ""
-
   state.messageStartSent = true
-
+  const inputCachedTokens = response.usage?.input_tokens_details?.cached_tokens
   const inputTokens =
-    (state.initialInputTokens ?? 0) - (state.initialInputCachedTokens ?? 0)
+    (response.usage?.input_tokens ?? 0) - (inputCachedTokens ?? 0)
   return [
     {
       type: "message_start",
       message: {
-        id,
+        id: response.id,
         type: "message",
         role: "assistant",
         content: [],
-        model,
+        model: response.model,
         stop_reason: null,
         stop_sequence: null,
         usage: {
           input_tokens: inputTokens,
           output_tokens: 0,
-          ...(state.initialInputCachedTokens !== undefined && {
-            cache_creation_input_tokens: state.initialInputCachedTokens,
+          ...(inputCachedTokens !== undefined && {
+            cache_creation_input_tokens: inputCachedTokens,
           }),
         },
       },
@@ -542,8 +468,9 @@ const openThinkingBlockIfNeeded = (
   outputIndex: number,
   events: Array<AnthropicStreamEventData>,
 ): number => {
-  const contentIndex = 0
-  const key = getBlockKey(outputIndex, contentIndex)
+  //thinking blocks has multiple summary_index, should combine into one block
+  const summaryIndex = 0
+  const key = getBlockKey(outputIndex, summaryIndex)
   let blockIndex = state.blockIndexByKey.get(key)
 
   if (blockIndex === undefined) {
@@ -590,18 +517,6 @@ const closeAllOpenBlocks = (
   }
 
   state.functionCallStateByOutputIndex.clear()
-  state.functionCallOutputIndexByItemId.clear()
-}
-
-const cacheResponseMetadata = (
-  state: ResponsesStreamState,
-  response: ResponsesResult,
-) => {
-  state.currentResponseId = response.id
-  state.currentModel = response.model
-  state.initialInputTokens = response.usage?.input_tokens ?? 0
-  state.initialInputCachedTokens =
-    response.usage?.input_tokens_details?.cached_tokens
 }
 
 const buildErrorEvent = (message: string): AnthropicStreamEventData => ({
@@ -614,32 +529,6 @@ const buildErrorEvent = (message: string): AnthropicStreamEventData => ({
 
 const getBlockKey = (outputIndex: number, contentIndex: number): string =>
   `${outputIndex}:${contentIndex}`
-
-const resolveFunctionCallOutputIndex = (
-  state: ResponsesStreamState,
-  rawEvent: Record<string, unknown>,
-): number | undefined => {
-  if (
-    typeof rawEvent.output_index === "number"
-    || (typeof rawEvent.output_index === "string"
-      && rawEvent.output_index.length > 0)
-  ) {
-    const parsed = toOptionalNumber(rawEvent.output_index)
-    if (parsed !== undefined) {
-      return parsed
-    }
-  }
-
-  const itemId = toNonEmptyString(rawEvent.item_id)
-  if (itemId) {
-    const mapped = state.functionCallOutputIndexByItemId.get(itemId)
-    if (mapped !== undefined) {
-      return mapped
-    }
-  }
-
-  return undefined
-}
 
 const openFunctionCallBlock = (
   state: ResponsesStreamState,
@@ -668,7 +557,6 @@ const openFunctionCallBlock = (
     }
 
     state.functionCallStateByOutputIndex.set(outputIndex, functionCallState)
-    state.functionCallOutputIndexByItemId.set(resolvedToolCallId, outputIndex)
   }
 
   const { blockIndex } = functionCallState
@@ -695,109 +583,25 @@ type FunctionCallDetails = {
   toolCallId: string
   name: string
   initialArguments?: string
-  itemId?: string
 }
 
 const extractFunctionCallDetails = (
-  rawEvent: Record<string, unknown>,
-  state: ResponsesStreamState,
+  rawEvent: ResponseOutputItemAddedEvent,
 ): FunctionCallDetails | undefined => {
-  const item = isRecord(rawEvent.item) ? rawEvent.item : undefined
-  if (!item) {
-    return undefined
-  }
-
-  const itemType = typeof item.type === "string" ? item.type : undefined
+  const item = rawEvent.item
+  const itemType = item.type
   if (itemType !== "function_call") {
     return undefined
   }
 
-  const outputIndex = resolveFunctionCallOutputIndex(state, rawEvent)
-  if (outputIndex === undefined) {
-    return undefined
-  }
-
-  const callId = toNonEmptyString(item.call_id)
-  const itemId = toNonEmptyString(item.id)
-  const name = toNonEmptyString(item.name) ?? "function"
-
-  const toolCallId = callId ?? itemId ?? `tool_call_${outputIndex}`
-  const initialArguments =
-    typeof item.arguments === "string" ? item.arguments : undefined
-
+  const outputIndex = rawEvent.output_index
+  const toolCallId = item.call_id
+  const name = item.name
+  const initialArguments = item.arguments
   return {
     outputIndex,
     toolCallId,
     name,
     initialArguments,
-    itemId,
   }
 }
-
-const toResponsesResult = (value: unknown): ResponsesResult | undefined =>
-  isResponsesResult(value) ? value : undefined
-
-const toOptionalNumber = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
-  }
-
-  if (typeof value === "string" && value.length > 0) {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) {
-      return parsed
-    }
-  }
-
-  return undefined
-}
-
-const toNonEmptyString = (value: unknown): string | undefined => {
-  if (typeof value === "string" && value.length > 0) {
-    return value
-  }
-
-  return undefined
-}
-
-const toNumber = (value: unknown): number => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) {
-      return parsed
-    }
-  }
-
-  return 0
-}
-
-const isResponsesResult = (value: unknown): value is ResponsesResult => {
-  if (!isRecord(value)) {
-    return false
-  }
-
-  if (typeof value.id !== "string") {
-    return false
-  }
-
-  if (typeof value.model !== "string") {
-    return false
-  }
-
-  if (!Array.isArray(value.output)) {
-    return false
-  }
-
-  if (typeof value.object !== "string") {
-    return false
-  }
-
-  return true
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null

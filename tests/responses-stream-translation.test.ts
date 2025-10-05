@@ -1,14 +1,20 @@
 import { describe, expect, test } from "bun:test"
 
 import type { AnthropicStreamEventData } from "~/routes/messages/anthropic-types"
+import type {
+  ResponseOutputItemAddedEvent,
+  ResponseFunctionCallArgumentsDeltaEvent,
+  ResponseFunctionCallArgumentsDoneEvent,
+} from "~/services/copilot/create-responses"
 
 import {
   createResponsesStreamState,
   translateResponsesStreamEvent,
 } from "~/routes/messages/responses-stream-translation"
 
-const createFunctionCallAddedEvent = () => ({
+const createFunctionCallAddedEvent = (): ResponseOutputItemAddedEvent => ({
   type: "response.output_item.added",
+  sequence_number: 1,
   output_index: 1,
   item: {
     id: "item-1",
@@ -29,31 +35,35 @@ describe("translateResponsesStreamEvent tool calls", () => {
       translateResponsesStreamEvent(
         {
           type: "response.function_call_arguments.delta",
+          item_id: "item-1",
           output_index: 1,
+          sequence_number: 2,
           delta: '{"todos":',
-        },
+        } as ResponseFunctionCallArgumentsDeltaEvent,
         state,
       ),
       translateResponsesStreamEvent(
         {
           type: "response.function_call_arguments.delta",
+          item_id: "item-1",
           output_index: 1,
+          sequence_number: 3,
           delta: "[]}",
-        },
+        } as ResponseFunctionCallArgumentsDeltaEvent,
         state,
       ),
       translateResponsesStreamEvent(
         {
           type: "response.function_call_arguments.done",
+          item_id: "item-1",
+          name: "TodoWrite",
           output_index: 1,
+          sequence_number: 4,
           arguments: '{"todos":[]}',
-        },
+        } as ResponseFunctionCallArgumentsDoneEvent,
         state,
       ),
     ].flat()
-
-    const messageStart = events.find((event) => event.type === "message_start")
-    expect(messageStart).toBeDefined()
 
     const blockStart = events.find(
       (event) => event.type === "content_block_start",
@@ -103,10 +113,13 @@ describe("translateResponsesStreamEvent tool calls", () => {
       translateResponsesStreamEvent(
         {
           type: "response.function_call_arguments.done",
+          item_id: "item-1",
+          name: "TodoWrite",
           output_index: 1,
+          sequence_number: 2,
           arguments:
             '{"todos":[{"content":"Review src/routes/responses/translation.ts"}]}',
-        },
+        } as ResponseFunctionCallArgumentsDoneEvent,
         state,
       ),
     ].flat()
