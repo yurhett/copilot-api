@@ -138,28 +138,29 @@ const handleWithResponsesApi = async (
       const streamState = createResponsesStreamState()
 
       for await (const chunk of response) {
-        consola.debug("Responses raw stream event:", JSON.stringify(chunk))
-
-        const eventName = (chunk as { event?: string }).event
+        const eventName = chunk.event
         if (eventName === "ping") {
           await stream.writeSSE({ event: "ping", data: "" })
           continue
         }
 
-        const data = (chunk as { data?: string }).data
+        const data = chunk.data
         if (!data) {
           continue
         }
+
+        consola.debug("Responses raw stream event:", data)
 
         const events = translateResponsesStreamEvent(
           JSON.parse(data) as ResponseStreamEvent,
           streamState,
         )
         for (const event of events) {
-          consola.debug("Translated Anthropic event:", JSON.stringify(event))
+          const eventData = JSON.stringify(event)
+          consola.debug("Translated Anthropic event:", eventData)
           await stream.writeSSE({
             event: event.type,
-            data: JSON.stringify(event),
+            data: eventData,
           })
         }
       }

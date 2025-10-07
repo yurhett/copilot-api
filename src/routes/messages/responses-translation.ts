@@ -142,7 +142,11 @@ const translateAssistantMessage = (
       continue
     }
 
-    if (block.type === "thinking") {
+    if (
+      block.type === "thinking"
+      && block.signature
+      && block.signature.includes("@")
+    ) {
       flushPendingContent("assistant", pendingContent, items)
       items.push(createReasoningContent(block))
       continue
@@ -233,16 +237,21 @@ const createImageContent = (
 const createReasoningContent = (
   block: AnthropicThinkingBlock,
 ): ResponseInputReasoning => {
-  // allign with vscode-copilot-chat extractThinkingData, otherwise it will cause miss cache occasionally —— the usage input cached tokens to be 0
+  // align with vscode-copilot-chat extractThinkingData, should add id, otherwise it will cause miss cache occasionally —— the usage input cached tokens to be 0
   // https://github.com/microsoft/vscode-copilot-chat/blob/main/src/platform/endpoint/node/responsesApi.ts#L162
   // when use in codex cli, reasoning id is empty, so it will cause miss cache occasionally
   const array = block.signature.split("@")
   const signature = array[0]
-  const id = array.length > 1 ? array[1] : undefined
+  const id = array[1]
   return {
     id,
     type: "reasoning",
-    summary: [],
+    summary: [
+      {
+        type: "summary_text",
+        text: block.thinking,
+      },
+    ],
     encrypted_content: signature,
   }
 }
@@ -284,9 +293,11 @@ When using the BashOutput tool, follow these rules:
 - Only Bash Tool run_in_background set to true, Use BashOutput to read the output later
 ### TodoWrite tool
 When using the TodoWrite tool, follow these rules:
-- Skip using the TodoWrite tool for simple or straightforward tasks (roughly the easiest 25%).
+- Skip using the TodoWrite tool for tasks with three or fewer steps.
 - Do not make single-step todo lists.
-- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.`
+- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.
+## Special user requests
+- If the user makes a simple request (such as asking for the time) which you can fulfill by running a terminal command (such as ''date''), you should do so.`
 
   if (typeof system === "string") {
     return system + toolUsePrompt
