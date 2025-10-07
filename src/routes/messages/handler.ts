@@ -4,6 +4,7 @@ import consola from "consola"
 import { streamSSE } from "hono/streaming"
 
 import { awaitApproval } from "~/lib/approval"
+import { getSmallModel } from "~/lib/config"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { state } from "~/lib/state"
 import {
@@ -41,6 +42,11 @@ export async function handleCompletion(c: Context) {
 
   const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
   consola.debug("Anthropic request payload:", JSON.stringify(anthropicPayload))
+
+  // fix claude code 2.0.28 warmup request consume premium request, forcing small model if no tools are used
+  if (!anthropicPayload.tools || anthropicPayload.tools.length === 0) {
+    anthropicPayload.model = getSmallModel()
+  }
 
   const useResponsesApi = shouldUseResponsesApi(anthropicPayload.model)
 
