@@ -41,6 +41,7 @@ function ensureConfigFile(): void {
   try {
     fs.accessSync(PATHS.CONFIG_PATH, fs.constants.R_OK | fs.constants.W_OK)
   } catch {
+    fs.mkdirSync(PATHS.APP_DIR, { recursive: true })
     fs.writeFileSync(
       PATHS.CONFIG_PATH,
       `${JSON.stringify(defaultConfig, null, 2)}\n`,
@@ -74,9 +75,7 @@ function readConfigFromDisk(): AppConfig {
 }
 
 export function getConfig(): AppConfig {
-  if (!cachedConfig) {
-    cachedConfig ??= readConfigFromDisk()
-  }
+  cachedConfig ??= readConfigFromDisk()
   return cachedConfig
 }
 
