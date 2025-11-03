@@ -6,6 +6,7 @@ import { PATHS } from "./paths"
 export interface AppConfig {
   extraPrompts?: Record<string, string>
   smallModel?: string
+  modelReasoningEfforts?: Record<string, "minimal" | "low" | "medium" | "high">
 }
 
 const defaultConfig: AppConfig = {
@@ -29,6 +30,9 @@ When using the TodoWrite tool, follow these rules:
 `,
   },
   smallModel: "gpt-5-mini",
+  modelReasoningEfforts: {
+    "gpt-5-mini": "low",
+  },
 }
 
 let cachedConfig: AppConfig | null = null
@@ -71,7 +75,7 @@ function readConfigFromDisk(): AppConfig {
 
 export function getConfig(): AppConfig {
   if (!cachedConfig) {
-    cachedConfig = readConfigFromDisk()
+    cachedConfig ??= readConfigFromDisk()
   }
   return cachedConfig
 }
@@ -84,4 +88,11 @@ export function getExtraPromptForModel(model: string): string {
 export function getSmallModel(): string {
   const config = getConfig()
   return config.smallModel ?? "gpt-5-mini"
+}
+
+export function getReasoningEffortForModel(
+  model: string,
+): "minimal" | "low" | "medium" | "high" {
+  const config = getConfig()
+  return config.modelReasoningEfforts?.[model] ?? "high"
 }
