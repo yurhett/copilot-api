@@ -11,7 +11,6 @@ import { generateEnvScript } from "./lib/shell"
 import { state } from "./lib/state"
 import { setupCopilotToken, setupGitHubToken } from "./lib/token"
 import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
-import { server } from "./server"
 
 interface RunServerOptions {
   port: number
@@ -26,8 +25,8 @@ interface RunServerOptions {
 }
 
 export async function runServer(options: RunServerOptions): Promise<void> {
+  state.verbose = options.verbose
   if (options.verbose) {
-    state.verbose = true
     consola.level = 5
     consola.info("Verbose logging enabled")
   }
@@ -108,6 +107,8 @@ export async function runServer(options: RunServerOptions): Promise<void> {
   consola.box(
     `🌐 Usage Viewer: https://ericc-ch.github.io/copilot-api?endpoint=${serverUrl}/usage`,
   )
+
+  const { server } = await import("./server")
 
   serve({
     fetch: server.fetch as ServerHandler,

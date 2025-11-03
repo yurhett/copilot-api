@@ -15,7 +15,7 @@ export interface State {
   // Rate limiting configuration
   rateLimitSeconds?: number
   lastRequestTimestamp?: number
-  verbose?: boolean
+  verbose: boolean
 }
 
 export const state: State = {
@@ -23,4 +23,5 @@ export const state: State = {
   manualApprove: false,
   rateLimitWait: false,
   showToken: false,
+  verbose: false,
 }
