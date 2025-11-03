@@ -4,6 +4,7 @@ import path from "node:path"
 import util from "node:util"
 
 import { PATHS } from "./paths"
+import { state } from "./state"
 
 const LOG_RETENTION_DAYS = 7
 const LOG_RETENTION_MS = LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000
@@ -150,7 +151,9 @@ export const createHandlerLogger = (name: string): ConsolaInstance => {
   const sanitizedName = sanitizeName(name)
   const instance = consola.withTag(name)
 
-  instance.level = 5
+  if (state.verbose) {
+    instance.level = 5
+  }
   instance.setReporters([])
 
   instance.addReporter({

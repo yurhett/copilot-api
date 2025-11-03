@@ -15,6 +15,7 @@ export interface State {
   // Rate limiting configuration
   rateLimitSeconds?: number
   lastRequestTimestamp?: number
+  verbose?: boolean
 }
 
 export const state: State = {

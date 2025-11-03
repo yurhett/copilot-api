@@ -27,6 +27,7 @@ interface RunServerOptions {
 
 export async function runServer(options: RunServerOptions): Promise<void> {
   if (options.verbose) {
+    state.verbose = true
     consola.level = 5
     consola.info("Verbose logging enabled")
   }
