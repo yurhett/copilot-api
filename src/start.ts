@@ -7,6 +7,7 @@ import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
 import { ensurePaths } from "./lib/paths"
+import { initProxyFromEnv } from "./lib/proxy"
 import { generateEnvScript } from "./lib/shell"
 import { state } from "./lib/state"
 import { setupCopilotToken, setupGitHubToken } from "./lib/token"
@@ -22,9 +23,14 @@ interface RunServerOptions {
   githubToken?: string
   claudeCode: boolean
   showToken: boolean
+  proxyEnv: boolean
 }
 
 export async function runServer(options: RunServerOptions): Promise<void> {
+  if (options.proxyEnv) {
+    initProxyFromEnv()
+  }
+
   state.verbose = options.verbose
   if (options.verbose) {
     consola.level = 5
@@ -178,6 +184,11 @@ export const start = defineCommand({
       default: false,
       description: "Show GitHub and Copilot tokens on fetch and refresh",
     },
+    "proxy-env": {
+      type: "boolean",
+      default: false,
+      description: "Initialize proxy from environment variables",
+    },
   },
   run({ args }) {
     const rateLimitRaw = args["rate-limit"]
@@ -195,6 +206,7 @@ export const start = defineCommand({
       githubToken: args["github-token"],
       claudeCode: args["claude-code"],
       showToken: args["show-token"],
+      proxyEnv: args["proxy-env"],
     })
   },
 })
