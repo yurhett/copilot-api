@@ -181,7 +181,7 @@ const handleWithResponsesApi = async (
 
       if (!streamState.messageCompleted) {
         logger.warn(
-          "Responses stream ended without completion; sending erorr event",
+          "Responses stream ended without completion; sending error event",
         )
         const errorEvent = buildErrorEvent(
           "Responses stream ended without completion",
