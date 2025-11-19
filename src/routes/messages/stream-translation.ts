@@ -57,13 +57,16 @@ function handleFinish(
   const { events, chunk } = context
   if (choice.finish_reason && choice.finish_reason.length > 0) {
     if (state.contentBlockOpen) {
+      const toolBlockOpen = isToolBlockOpen(state)
       context.events.push({
         type: "content_block_stop",
         index: state.contentBlockIndex,
       })
       state.contentBlockOpen = false
       state.contentBlockIndex++
-      handleReasoningOpaque(choice.delta, events, state)
+      if (!toolBlockOpen) {
+        handleReasoningOpaque(choice.delta, events, state)
+      }
     }
 
     events.push(
