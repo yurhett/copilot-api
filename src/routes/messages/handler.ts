@@ -98,6 +98,7 @@ const handleWithChatCompletions = async (
       contentBlockIndex: 0,
       contentBlockOpen: false,
       toolCalls: {},
+      thinkingBlockOpen: false,
     }
 
     for await (const rawEvent of response) {
