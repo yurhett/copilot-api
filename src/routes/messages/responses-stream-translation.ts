@@ -38,7 +38,7 @@ const updateWhitespaceRunState = (
   let count = previousCount
 
   for (const char of chunk) {
-    if (char === "\r" || char === "\n") {
+    if (char === "\r" || char === "\n" || char === "\t") {
       count += 1
       if (count > MAX_CONSECUTIVE_FUNCTION_CALL_WHITESPACE) {
         return { nextCount: count, exceeded: true }
