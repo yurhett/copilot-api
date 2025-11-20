@@ -162,7 +162,7 @@ function handleReasoningOpaqueInToolCalls(
   events: Array<AnthropicStreamEventData>,
   delta: Delta,
 ) {
-  if (state.contentBlockOpen) {
+  if (state.contentBlockOpen && !isToolBlockOpen(state)) {
     events.push({
       type: "content_block_stop",
       index: state.contentBlockIndex,
