@@ -25,6 +25,8 @@ interface ModelLimits {
 }
 
 interface ModelSupports {
+  max_thinking_budget?: number
+  min_thinking_budget?: number
   tool_calls?: boolean
   parallel_tool_calls?: boolean
   dimensions?: boolean

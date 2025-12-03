@@ -1,3 +1,6 @@
+import type { Model } from "~/services/copilot/get-models"
+
+import { state } from "~/lib/state"
 import {
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
@@ -29,11 +32,15 @@ import { mapOpenAIStopReasonToAnthropic } from "./utils"
 export function translateToOpenAI(
   payload: AnthropicMessagesPayload,
 ): ChatCompletionsPayload {
+  const modelId = translateModelName(payload.model)
+  const model = state.models?.data.find((m) => m.id === modelId)
+  const thinkingBudget = getThinkingBudget(payload, model)
   return {
-    model: translateModelName(payload.model),
+    model: modelId,
     messages: translateAnthropicMessagesToOpenAI(
       payload.messages,
       payload.system,
+      modelId,
     ),
     max_tokens: payload.max_tokens,
     stop: payload.stop_sequences,
@@ -43,14 +50,32 @@ export function translateToOpenAI(
     user: payload.metadata?.user_id,
     tools: translateAnthropicToolsToOpenAI(payload.tools),
     tool_choice: translateAnthropicToolChoiceToOpenAI(payload.tool_choice),
+    thinking_budget: thinkingBudget,
   }
+}
+
+function getThinkingBudget(
+  payload: AnthropicMessagesPayload,
+  model: Model | undefined,
+): number | undefined {
+  const thinking = payload.thinking
+  if (model && thinking) {
+    const maxThinkingBudget = Math.min(
+      model.capabilities.supports.max_thinking_budget ?? 0,
+      (model.capabilities.limits.max_output_tokens ?? 0) - 1,
+    )
+    if (maxThinkingBudget > 0 && thinking.budget_tokens !== undefined) {
+      return Math.min(thinking.budget_tokens, maxThinkingBudget)
+    }
+  }
+  return undefined
 }
 
 function translateModelName(model: string): string {
   // Subagent requests use a specific model number which Copilot doesn't support
   if (model.startsWith("claude-sonnet-4-")) {
     return model.replace(/^claude-sonnet-4-.*/, "claude-sonnet-4")
-  } else if (model.startsWith("claude-opus-")) {
+  } else if (model.startsWith("claude-opus-4-")) {
     return model.replace(/^claude-opus-4-.*/, "claude-opus-4")
   }
   return model
@@ -59,13 +84,14 @@ function translateModelName(model: string): string {
 function translateAnthropicMessagesToOpenAI(
   anthropicMessages: Array<AnthropicMessage>,
   system: string | Array<AnthropicTextBlock> | undefined,
+  modelId: string,
 ): Array<Message> {
   const systemMessages = handleSystemPrompt(system)
 
   const otherMessages = anthropicMessages.flatMap((message) =>
     message.role === "user" ?
       handleUserMessage(message)
-    : handleAssistantMessage(message),
+    : handleAssistantMessage(message, modelId),
   )
 
   return [...systemMessages, ...otherMessages]
@@ -125,6 +151,7 @@ function handleUserMessage(message: AnthropicUserMessage): Array<Message> {
 
 function handleAssistantMessage(
   message: AnthropicAssistantMessage,
+  modelId: string,
 ): Array<Message> {
   if (!Array.isArray(message.content)) {
     return [
@@ -139,14 +166,28 @@ function handleAssistantMessage(
     (block): block is AnthropicToolUseBlock => block.type === "tool_use",
   )
 
-  const thinkingBlocks = message.content.filter(
+  let thinkingBlocks = message.content.filter(
     (block): block is AnthropicThinkingBlock => block.type === "thinking",
   )
 
-  const allThinkingContent = thinkingBlocks
+  if (modelId.startsWith("claude")) {
+    thinkingBlocks = thinkingBlocks.filter(
+      (b) =>
+        b.thinking
+        && b.thinking.length > 0
+        && b.signature
+        && b.signature.length > 0
+        // gpt signature has @ in it, so filter those out for claude models
+        && !b.signature.includes("@"),
+    )
+  }
+
+  const thinkingContents = thinkingBlocks
     .filter((b) => b.thinking && b.thinking.length > 0)
     .map((b) => b.thinking)
-    .join("\n\n")
+
+  const allThinkingContent =
+    thinkingContents.length > 0 ? thinkingContents.join("\n\n") : undefined
 
   const signature = thinkingBlocks.find(
     (b) => b.signature && b.signature.length > 0,
