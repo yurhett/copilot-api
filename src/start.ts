@@ -6,6 +6,7 @@ import consola from "consola"
 import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
+import { mergeConfigWithDefaults } from "./lib/config"
 import { ensurePaths } from "./lib/paths"
 import { initProxyFromEnv } from "./lib/proxy"
 import { generateEnvScript } from "./lib/shell"
@@ -27,6 +28,9 @@ interface RunServerOptions {
 }
 
 export async function runServer(options: RunServerOptions): Promise<void> {
+  // Ensure config is merged with defaults at startup
+  mergeConfigWithDefaults()
+
   if (options.proxyEnv) {
     initProxyFromEnv()
   }
