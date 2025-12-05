@@ -177,6 +177,28 @@ The following command line options are available for the `start` command:
 | ------ | ------------------------- | ------- | ----- |
 | --json | Output debug info as JSON | false   | none  |
 
+## Configuration (config.json)
+
+- **Location:** `~/.local/share/copilot-api/config.json` (Linux/macOS) or `%USERPROFILE%\.local\share\copilot-api\config.json` (Windows).
+- **Default shape:**
+  ```json
+  {
+    "extraPrompts": {
+      "gpt-5-mini": "<built-in exploration prompt>",
+      "gpt-5.1-codex-max": "<built-in exploration prompt>"
+    },
+    "smallModel": "gpt-5-mini",
+    "modelReasoningEfforts": {
+      "gpt-5-mini": "low"
+    }
+  }
+  ```
+- **extraPrompts:** Map of `model -> prompt` appended to the first system prompt when translating Anthropic-style requests to Copilot. Use this to inject guardrails or guidance per model. Missing default entries are auto-added without overwriting your custom prompts.
+- **smallModel:** Fallback model used for tool-less warmup messages (e.g., Claude Code probe requests) to avoid spending premium requests; defaults to `gpt-5-mini`.
+- **modelReasoningEfforts:** Per-model `reasoning.effort` sent to the Copilot Responses API. Allowed values are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`. If a model isn’t listed, `high` is used by default.
+
+Edit this file to customize prompts or swap in your own fast model. Restart the server (or rerun the command) after changes so the cached config is refreshed.
+
 ## API Endpoints
 
 The server exposes several endpoints to interact with the Copilot API. It provides OpenAI-compatible endpoints and now also includes support for Anthropic-compatible endpoints, allowing for greater flexibility with different tools and services.
@@ -187,7 +209,7 @@ These endpoints mimic the OpenAI API structure.
 
 | Endpoint                    | Method | Description                                                      |
 | --------------------------- | ------ | ---------------------------------------------------------------- |
-| `POST /v1/responses`        | `POST` | Most advanced interface for generating model responses.          |
+| `POST /v1/responses`        | `POST` | OpenAI Most advanced interface for generating model responses.          |
 | `POST /v1/chat/completions` | `POST` | Creates a model response for the given chat conversation.        |
 | `GET /v1/models`            | `GET`  | Lists the currently available models.                            |
 | `POST /v1/embeddings`       | `POST` | Creates an embedding vector representing the input text.         |

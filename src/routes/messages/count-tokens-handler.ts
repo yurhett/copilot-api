@@ -34,7 +34,7 @@ export async function handleCountTokens(c: Context) {
 
     if (anthropicPayload.tools && anthropicPayload.tools.length > 0) {
       let addToolSystemPromptCount = false
-      if (anthropicBeta?.startsWith("claude-code")) {
+      if (anthropicBeta) {
         const toolsLength = anthropicPayload.tools.length
         addToolSystemPromptCount = !anthropicPayload.tools.some(
           (tool) =>

@@ -46,8 +46,11 @@ export async function handleCompletion(c: Context) {
   const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
   logger.debug("Anthropic request payload:", JSON.stringify(anthropicPayload))
 
-  // fix claude code 2.0.28 warmup request consume premium request, forcing small model if no tools are used
-  if (!anthropicPayload.tools || anthropicPayload.tools.length === 0) {
+  // fix claude code 2.0.28+ warmup request consume premium request, forcing small model if no tools are used
+  // set "CLAUDE_CODE_SUBAGENT_MODEL": "you small model" also can avoid this
+  const anthropicBeta = c.req.header("anthropic-beta")
+  const noTools = !anthropicPayload.tools || anthropicPayload.tools.length === 0
+  if (anthropicBeta && noTools) {
     anthropicPayload.model = getSmallModel()
   }
 

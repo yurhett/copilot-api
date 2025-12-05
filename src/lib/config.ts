@@ -6,28 +6,23 @@ import { PATHS } from "./paths"
 export interface AppConfig {
   extraPrompts?: Record<string, string>
   smallModel?: string
-  modelReasoningEfforts?: Record<string, "minimal" | "low" | "medium" | "high">
+  modelReasoningEfforts?: Record<
+    string,
+    "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+  >
 }
+
+const gpt5ExplorationPrompt = `## Exploration and reading files
+- **Think first.** Before any tool call, decide ALL files/resources you will need.
+- **Batch everything.** If you need multiple files (even from different places), read them together.
+- **multi_tool_use.parallel** Use multi_tool_use.parallel to parallelize tool calls and only this.
+- **Only make sequential calls if you truly cannot know the next file without seeing a result first.**
+- **Workflow:** (a) plan all needed reads → (b) issue one parallel batch → (c) analyze results → (d) repeat if new, unpredictable reads arise.`
 
 const defaultConfig: AppConfig = {
   extraPrompts: {
-    "gpt-5-codex": `
-## Tool use
-- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.
-### Bash tool
-When using the Bash tool, follow these rules:
-- always run_in_background set to false, unless you are running a long-running command (e.g., a server or a watch command).
-### BashOutput tool
-When using the BashOutput tool, follow these rules:
-- Only Bash Tool run_in_background set to true, Use BashOutput to read the output later
-### TodoWrite tool
-When using the TodoWrite tool, follow these rules:
-- Skip using the TodoWrite tool for tasks with three or fewer steps.
-- Do not make single-step todo lists.
-- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.
-## Special user requests
-- If the user makes a simple request (such as asking for the time) which you can fulfill by running a terminal command (such as 'date'), you should do so.
-`,
+    "gpt-5-mini": gpt5ExplorationPrompt,
+    "gpt-5.1-codex-max": gpt5ExplorationPrompt,
   },
   smallModel: "gpt-5-mini",
   modelReasoningEfforts: {
@@ -74,6 +69,56 @@ function readConfigFromDisk(): AppConfig {
   }
 }
 
+function mergeDefaultExtraPrompts(config: AppConfig): {
+  mergedConfig: AppConfig
+  changed: boolean
+} {
+  const extraPrompts = config.extraPrompts ?? {}
+  const defaultExtraPrompts = defaultConfig.extraPrompts ?? {}
+
+  const missingExtraPromptModels = Object.keys(defaultExtraPrompts).filter(
+    (model) => !Object.hasOwn(extraPrompts, model),
+  )
+
+  if (missingExtraPromptModels.length === 0) {
+    return { mergedConfig: config, changed: false }
+  }
+
+  return {
+    mergedConfig: {
+      ...config,
+      extraPrompts: {
+        ...defaultExtraPrompts,
+        ...extraPrompts,
+      },
+    },
+    changed: true,
+  }
+}
+
+export function mergeConfigWithDefaults(): AppConfig {
+  const config = readConfigFromDisk()
+  const { mergedConfig, changed } = mergeDefaultExtraPrompts(config)
+
+  if (changed) {
+    try {
+      fs.writeFileSync(
+        PATHS.CONFIG_PATH,
+        `${JSON.stringify(mergedConfig, null, 2)}\n`,
+        "utf8",
+      )
+    } catch (writeError) {
+      consola.warn(
+        "Failed to write merged extraPrompts to config file",
+        writeError,
+      )
+    }
+  }
+
+  cachedConfig = mergedConfig
+  return mergedConfig
+}
+
 export function getConfig(): AppConfig {
   cachedConfig ??= readConfigFromDisk()
   return cachedConfig
@@ -91,7 +136,7 @@ export function getSmallModel(): string {
 
 export function getReasoningEffortForModel(
   model: string,
-): "minimal" | "low" | "medium" | "high" {
+): "none" | "minimal" | "low" | "medium" | "high" | "xhigh" {
   const config = getConfig()
   return config.modelReasoningEfforts?.[model] ?? "high"
 }
