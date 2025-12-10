@@ -65,7 +65,11 @@ function getThinkingBudget(
       (model.capabilities.limits.max_output_tokens ?? 0) - 1,
     )
     if (maxThinkingBudget > 0 && thinking.budget_tokens !== undefined) {
-      return Math.min(thinking.budget_tokens, maxThinkingBudget)
+      const budgetTokens = Math.min(thinking.budget_tokens, maxThinkingBudget)
+      return Math.max(
+        budgetTokens,
+        model.capabilities.supports.min_thinking_budget ?? 1024,
+      )
     }
   }
   return undefined
@@ -322,13 +326,13 @@ export function translateToAnthropic(
   // Process all choices to extract text and tool use blocks
   for (const choice of response.choices) {
     const textBlocks = getAnthropicTextBlocks(choice.message.content)
-    const thingBlocks = getAnthropicThinkBlocks(
+    const thinkBlocks = getAnthropicThinkBlocks(
       choice.message.reasoning_text,
       choice.message.reasoning_opaque,
     )
     const toolUseBlocks = getAnthropicToolUseBlocks(choice.message.tool_calls)
 
-    assistantContentBlocks.push(...thingBlocks, ...textBlocks, ...toolUseBlocks)
+    assistantContentBlocks.push(...thinkBlocks, ...textBlocks, ...toolUseBlocks)
 
     // Use the finish_reason from the first choice, or prioritize tool_calls
     if (choice.finish_reason === "tool_calls" || stopReason === "stop") {
