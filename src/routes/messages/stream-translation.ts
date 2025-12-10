@@ -212,6 +212,30 @@ function handleContent(
       },
     })
   }
+
+  // handle for claude model
+  if (
+    delta.content === ""
+    && delta.reasoning_opaque
+    && delta.reasoning_opaque.length > 0
+  ) {
+    events.push(
+      {
+        type: "content_block_delta",
+        index: state.contentBlockIndex,
+        delta: {
+          type: "signature_delta",
+          signature: delta.reasoning_opaque,
+        },
+      },
+      {
+        type: "content_block_stop",
+        index: state.contentBlockIndex,
+      },
+    )
+    state.contentBlockIndex++
+    state.thinkingBlockOpen = false
+  }
 }
 
 function handleMessageStart(
@@ -313,25 +337,6 @@ function handleThinkingText(
         thinking: delta.reasoning_text,
       },
     })
-
-    if (delta.reasoning_opaque && delta.reasoning_opaque.length > 0) {
-      events.push(
-        {
-          type: "content_block_delta",
-          index: state.contentBlockIndex,
-          delta: {
-            type: "signature_delta",
-            signature: delta.reasoning_opaque,
-          },
-        },
-        {
-          type: "content_block_stop",
-          index: state.contentBlockIndex,
-        },
-      )
-      state.contentBlockIndex++
-      state.thinkingBlockOpen = false
-    }
   }
 }
 

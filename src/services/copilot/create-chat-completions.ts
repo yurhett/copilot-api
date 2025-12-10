@@ -152,6 +152,7 @@ export interface ChatCompletionsPayload {
     | { type: "function"; function: { name: string } }
     | null
   user?: string | null
+  thinking_budget?: number
 }
 
 export interface Tool {
