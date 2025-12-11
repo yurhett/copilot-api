@@ -1,4 +1,4 @@
-const FALLBACK = "1.106.3"
+const FALLBACK = "1.107.0"
 
 export async function getVSCodeVersion() {
   const controller = new AbortController()
