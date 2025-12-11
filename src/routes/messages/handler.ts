@@ -84,7 +84,7 @@ const handleWithChatCompletions = async (
   if (isNonStreaming(response)) {
     logger.debug(
       "Non-streaming response from Copilot:",
-      JSON.stringify(response).slice(-400),
+      JSON.stringify(response),
     )
     const anthropicResponse = translateToAnthropic(response)
     logger.debug(
