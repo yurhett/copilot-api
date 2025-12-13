@@ -14,9 +14,8 @@ const USER_AGENT = `GitHubCopilotChat/${COPILOT_VERSION}`
 const API_VERSION = "2025-10-01"
 
 export const copilotBaseUrl = (state: State) =>
-  state.accountType === "individual" ?
-    "https://api.githubcopilot.com"
-  : `https://api.${state.accountType}.githubcopilot.com`
+  `https://api.${state.accountType}.githubcopilot.com`
+
 export const copilotHeaders = (state: State, vision: boolean = false) => {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${state.copilotToken}`,
@@ -25,7 +24,7 @@ export const copilotHeaders = (state: State, vision: boolean = false) => {
     "editor-version": `vscode/${state.vsCodeVersion}`,
     "editor-plugin-version": EDITOR_PLUGIN_VERSION,
     "user-agent": USER_AGENT,
-    "openai-intent": "conversation-panel",
+    "openai-intent": "conversation-agent",
     "x-github-api-version": API_VERSION,
     "x-request-id": randomUUID(),
     "x-vscode-user-agent-library-version": "electron-fetch",
