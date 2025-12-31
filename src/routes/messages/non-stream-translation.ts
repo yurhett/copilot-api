@@ -89,7 +89,11 @@ function translateAnthropicMessagesToOpenAI(
   modelId: string,
   thinkingBudget: number | undefined,
 ): Array<Message> {
-  const systemMessages = handleSystemPrompt(payload.system, modelId)
+  const systemMessages = handleSystemPrompt(
+    payload.system,
+    modelId,
+    thinkingBudget,
+  )
   const otherMessages = payload.messages.flatMap((message) =>
     message.role === "user" ?
       handleUserMessage(message)
@@ -98,7 +102,8 @@ function translateAnthropicMessagesToOpenAI(
   if (modelId.startsWith("claude") && thinkingBudget) {
     const thinkingMessage = {
       role: "user",
-      content: "Please strictly follow Interleaved thinking",
+      content:
+        "<system-reminder>Please strictly follow Interleaved thinking</system-reminder>",
     } as Message
     return [...systemMessages, thinkingMessage, ...otherMessages]
   }
@@ -108,19 +113,21 @@ function translateAnthropicMessagesToOpenAI(
 function handleSystemPrompt(
   system: string | Array<AnthropicTextBlock> | undefined,
   modelId: string,
+  thinkingBudget: number | undefined,
 ): Array<Message> {
   if (!system) {
     return []
   }
 
-  let extraPrompt = `
-  ## Interleaved thinking
-  - Interleaved thinking is enabled
-  - You MUST think after receiving tool results before deciding the next action or final answer.
-  `
-  if (!modelId.startsWith("claude")) {
-    extraPrompt = ""
+  let extraPrompt = ""
+  if (modelId.startsWith("claude") && thinkingBudget) {
+    extraPrompt = `
+## Interleaved thinking
+- Interleaved thinking is enabled
+- You MUST think after receiving tool results before deciding the next action or final answer.
+`
   }
+
   if (typeof system === "string") {
     return [{ role: "system", content: system + extraPrompt }]
   } else {
