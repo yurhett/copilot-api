@@ -218,6 +218,7 @@ function handleContent(
     delta.content === ""
     && delta.reasoning_opaque
     && delta.reasoning_opaque.length > 0
+    && state.thinkingBlockOpen
   ) {
     events.push(
       {
@@ -317,6 +318,15 @@ function handleThinkingText(
   events: Array<AnthropicStreamEventData>,
 ) {
   if (delta.reasoning_text && delta.reasoning_text.length > 0) {
+    // compatible with copilot API returning content->reasoning_text->reasoning_opaque in different deltas
+    // this is an extremely abnormal situation, probably a server-side bug
+    // only occurs in the claude model, with a very low probability of occurrence
+    if (state.contentBlockOpen) {
+      delta.content = delta.reasoning_text
+      delta.reasoning_text = undefined
+      return
+    }
+
     if (!state.thinkingBlockOpen) {
       events.push({
         type: "content_block_start",
