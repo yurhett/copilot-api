@@ -83,6 +83,7 @@ export interface Delta {
   }>
   reasoning_text?: string | null
   reasoning_opaque?: string | null
+  reasoning_content?: string | null
 }
 
 export interface Choice {

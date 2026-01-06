@@ -10,6 +10,7 @@ import { getTokenCount } from "~/lib/tokenizer"
 import { isNullish } from "~/lib/utils"
 import {
   createChatCompletions,
+  type ChatCompletionChunk,
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
 } from "~/services/copilot/create-chat-completions"
@@ -61,7 +62,7 @@ export async function handleCompletion(c: Context) {
     for await (const chunk of response) {
       if (chunk.data && chunk.data !== "[DONE]") {
         try {
-          const data = JSON.parse(chunk.data)
+          const data = JSON.parse(chunk.data) as ChatCompletionChunk
           if (data.choices?.[0]?.delta?.reasoning_text) {
             data.choices[0].delta.reasoning_content =
               data.choices[0].delta.reasoning_text
