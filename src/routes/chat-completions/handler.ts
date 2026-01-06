@@ -60,17 +60,13 @@ export async function handleCompletion(c: Context) {
   logger.debug("Streaming response")
   return streamSSE(c, async (stream) => {
     for await (const chunk of response) {
-      if (chunk.data && chunk.data !== "[DONE]") {
-        try {
-          const data = JSON.parse(chunk.data) as ChatCompletionChunk
-          if (data.choices?.[0]?.delta?.reasoning_text) {
-            data.choices[0].delta.reasoning_content =
-              data.choices[0].delta.reasoning_text
-            delete data.choices[0].delta.reasoning_text
-            chunk.data = JSON.stringify(data)
+      const chatChunk = chunk as ChatCompletionChunk
+      if (chatChunk.choices) {
+        for (const choice of chatChunk.choices) {
+          if (choice.delta.reasoning_text) {
+            choice.delta.reasoning_content = choice.delta.reasoning_text
+            choice.delta.reasoning_text = undefined
           }
-        } catch (e) {
-          logger.warn("Failed to parse chunk data:", e)
         }
       }
       logger.debug("Streaming chunk:", JSON.stringify(chunk))
