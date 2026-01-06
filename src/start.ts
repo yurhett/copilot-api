@@ -6,13 +6,13 @@ import consola from "consola"
 import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
+import { mergeConfigWithDefaults } from "./lib/config"
 import { ensurePaths } from "./lib/paths"
 import { initProxyFromEnv } from "./lib/proxy"
 import { generateEnvScript } from "./lib/shell"
 import { state } from "./lib/state"
 import { setupCopilotToken, setupGitHubToken } from "./lib/token"
 import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
-import { server } from "./server"
 
 interface RunServerOptions {
   port: number
@@ -28,10 +28,14 @@ interface RunServerOptions {
 }
 
 export async function runServer(options: RunServerOptions): Promise<void> {
+  // Ensure config is merged with defaults at startup
+  mergeConfigWithDefaults()
+
   if (options.proxyEnv) {
     initProxyFromEnv()
   }
 
+  state.verbose = options.verbose
   if (options.verbose) {
     consola.level = 5
     consola.info("Verbose logging enabled")
@@ -114,9 +118,14 @@ export async function runServer(options: RunServerOptions): Promise<void> {
     `🌐 Usage Viewer: https://ericc-ch.github.io/copilot-api?endpoint=${serverUrl}/usage`,
   )
 
+  const { server } = await import("./server")
+
   serve({
     fetch: server.fetch as ServerHandler,
     port: options.port,
+    bun: {
+      idleTimeout: 0,
+    },
   })
 }
 
