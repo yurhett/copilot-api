@@ -59,6 +59,19 @@ export async function handleCompletion(c: Context) {
   logger.debug("Streaming response")
   return streamSSE(c, async (stream) => {
     for await (const chunk of response) {
+      if (chunk.data && chunk.data !== "[DONE]") {
+        try {
+          const data = JSON.parse(chunk.data)
+          if (data.choices?.[0]?.delta?.reasoning_text) {
+            data.choices[0].delta.reasoning_content =
+              data.choices[0].delta.reasoning_text
+            delete data.choices[0].delta.reasoning_text
+            chunk.data = JSON.stringify(data)
+          }
+        } catch (e) {
+          logger.warn("Failed to parse chunk data:", e)
+        }
+      }
       logger.debug("Streaming chunk:", JSON.stringify(chunk))
       await stream.writeSSE(chunk as SSEMessage)
     }
