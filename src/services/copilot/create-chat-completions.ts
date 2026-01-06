@@ -65,7 +65,6 @@ export interface ChatCompletionChunk {
     completion_tokens_details?: {
       accepted_prediction_tokens: number
       rejected_prediction_tokens: number
-      reasoning_tokens?: number
     }
   }
 }
@@ -83,7 +82,6 @@ export interface Delta {
     }
   }>
   reasoning_text?: string | null
-  reasoning_content?: string | null
   reasoning_opaque?: string | null
 }
 
@@ -117,12 +115,11 @@ interface ResponseMessage {
   role: "assistant"
   content: string | null
   reasoning_text?: string | null
-  reasoning_content?: string | null
   reasoning_opaque?: string | null
   tool_calls?: Array<ToolCall>
 }
 
-interface ChoiceNonStreaming {
+export interface ChoiceNonStreaming {
   index: number
   message: ResponseMessage
   logprobs: object | null
